@@ -1770,12 +1770,30 @@ const SubjectPicker=({sectionId,sections,subjects,schedules,teachers,rooms,editi
     return{units,scheduled,isComplete,isOver,pct,byDay,existing};
   };
 
-  // Build options list
+  // Build options list — always based on subjects state so new subjects appear immediately
   const sec=sections.find(s=>s.id===sectionId);
   const secSubs=sec&&(sec.sectionSubjects||[]).length>0?sec.sectionSubjects:null;
+
+  // Get all subjects that match this section's grade level and strand
+  const matchingSubjects=subjects.filter(sub=>{
+    if(!sec)return true;
+    if(sub.gradeLevel&&sub.gradeLevel!==sec.gradeLevel)return false;
+    if(sub.strand&&sec.strand&&sub.strand!==sec.strand)return false;
+    return true;
+  });
+
+  // If section has assigned sectionSubjects, show those first with their units,
+  // then also include any matching subjects not yet assigned (units=0) so new subjects show up
   const options=secSubs
-    ?secSubs.map(ss=>{const sub=subjects.find(x=>x.id===ss.subjectId);return sub?{id:sub.id,name:sub.name,units:ss.units}:null;}).filter(Boolean)
-    :subjects.map(s=>({id:s.id,name:s.name,units:0}));
+    ?[
+        // Assigned subjects (with units)
+        ...secSubs.map(ss=>{const sub=subjects.find(x=>x.id===ss.subjectId);return sub?{id:sub.id,name:sub.name,units:ss.units,assigned:true}:null;}).filter(Boolean),
+        // Unassigned but matching subjects (new ones created will appear here)
+        ...matchingSubjects
+          .filter(sub=>!secSubs.some(ss=>ss.subjectId===sub.id))
+          .map(sub=>({id:sub.id,name:sub.name,units:0,assigned:false}))
+      ]
+    :matchingSubjects.map(s=>({id:s.id,name:s.name,units:0,assigned:false}));
 
   const selectedSub=options.find(o=>o.id===selectedId);
 
@@ -1816,41 +1834,58 @@ const SubjectPicker=({sectionId,sections,subjects,schedules,teachers,rooms,editi
             onClick={()=>{onSelect('');setOpen(false);setHoverPopup(null);}}
           >— Select Subject —</div>
 
-          {options.map(opt=>{
+          {/* Section label for assigned subjects */}
+          {secSubs&&options.some(o=>o.assigned)&&(
+            <div style={{padding:'5px 12px',fontSize:10,fontWeight:700,color:'var(--accent3)',textTransform:'uppercase',letterSpacing:1,background:'rgba(34,209,96,0.05)',borderBottom:'1px solid var(--border)'}}>
+              ✅ Assigned to Section
+            </div>
+          )}
+
+          {options.map((opt,idx)=>{
             const info=getSubjectInfo(opt.id);
             const isSelected=selectedId===opt.id;
             const clr=info.isOver?'var(--danger)':info.isComplete?'var(--accent3)':info.scheduled>0?'var(--accent2)':'var(--text3)';
             const icon=info.isOver?'⛔':info.isComplete?'✅':info.scheduled>0?'📌':null;
+            // Show divider before unassigned subjects group
+            const prevOpt=options[idx-1];
+            const showDivider=secSubs&&idx>0&&!opt.assigned&&prevOpt&&prevOpt.assigned;
             return(
-              <div
-                key={opt.id}
-                style={{
-                  padding:'9px 12px',cursor:'pointer',
-                  background:isSelected?'rgba(79,158,255,0.1)':'transparent',
-                  borderBottom:'1px solid rgba(255,255,255,0.04)',
-                  display:'flex',alignItems:'center',gap:8,
-                  transition:'background .12s',
-                }}
-                onClick={()=>{onSelect(opt.id);setOpen(false);setHoverPopup(null);}}
-                onMouseEnter={e=>{e.currentTarget.style.background=isSelected?'rgba(79,158,255,0.15)':'rgba(255,255,255,0.04)';showPopup(e,opt.id);}}
-                onMouseLeave={e=>{e.currentTarget.style.background=isSelected?'rgba(79,158,255,0.1)':'transparent';setHoverPopup(null);}}
-              >
-                {/* Subject name */}
-                <span style={{flex:1,fontSize:13,color:isSelected?'var(--accent2)':'var(--text)',fontWeight:isSelected?600:400}}>
-                  {opt.name}{opt.units>0?` (${opt.units} units)`:''}
-                </span>
-                {/* Status indicator */}
-                {icon&&<span style={{fontSize:13}}>{icon}</span>}
-                {info.units>0&&(
-                  <div style={{display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
-                    <div style={{width:40,height:4,background:'rgba(255,255,255,0.1)',borderRadius:99,overflow:'hidden'}}>
-                      <div style={{width:info.pct+'%',height:'100%',background:clr,borderRadius:99}}/>
-                    </div>
-                    <span style={{fontSize:10,color:clr,fontWeight:700,minWidth:28}}>{info.scheduled}/{info.units}</span>
+              <React.Fragment key={opt.id}>
+                {showDivider&&(
+                  <div style={{padding:'5px 12px',fontSize:10,fontWeight:700,color:'var(--accent5)',textTransform:'uppercase',letterSpacing:1,background:'rgba(255,178,36,0.05)',borderTop:'1px solid var(--border)',borderBottom:'1px solid var(--border)'}}>
+                    ➕ Other Available Subjects
                   </div>
                 )}
-                {isSelected&&<span style={{color:'var(--accent2)',fontSize:12,fontWeight:700}}>✓</span>}
-              </div>
+                <div
+                  style={{
+                    padding:'9px 12px',cursor:'pointer',
+                    background:isSelected?'rgba(79,158,255,0.1)':'transparent',
+                    borderBottom:'1px solid rgba(255,255,255,0.04)',
+                    display:'flex',alignItems:'center',gap:8,
+                    transition:'background .12s',
+                    opacity: opt.assigned===false&&secSubs?0.75:1,
+                  }}
+                  onClick={()=>{onSelect(opt.id);setOpen(false);setHoverPopup(null);}}
+                  onMouseEnter={e=>{e.currentTarget.style.background=isSelected?'rgba(79,158,255,0.15)':'rgba(255,255,255,0.04)';showPopup(e,opt.id);}}
+                  onMouseLeave={e=>{e.currentTarget.style.background=isSelected?'rgba(79,158,255,0.1)':'transparent';setHoverPopup(null);}}
+                >
+                  {/* Subject name */}
+                  <span style={{flex:1,fontSize:13,color:isSelected?'var(--accent2)':'var(--text)',fontWeight:isSelected?600:400}}>
+                    {opt.name}{opt.units>0?` (${opt.units} units)`:''}
+                  </span>
+                  {/* Status indicator */}
+                  {icon&&<span style={{fontSize:13}}>{icon}</span>}
+                  {info.units>0&&(
+                    <div style={{display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
+                      <div style={{width:40,height:4,background:'rgba(255,255,255,0.1)',borderRadius:99,overflow:'hidden'}}>
+                        <div style={{width:info.pct+'%',height:'100%',background:clr,borderRadius:99}}/>
+                      </div>
+                      <span style={{fontSize:10,color:clr,fontWeight:700,minWidth:28}}>{info.scheduled}/{info.units}</span>
+                    </div>
+                  )}
+                  {isSelected&&<span style={{color:'var(--accent2)',fontSize:12,fontWeight:700}}>✓</span>}
+                </div>
+              </React.Fragment>
             );
           })}
         </div>
