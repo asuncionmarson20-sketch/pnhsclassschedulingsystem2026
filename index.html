@@ -4648,7 +4648,12 @@ const App=()=>{
         rooms:saved.rooms||[...SEED_ROOMS],
         sections:(saved.sections||[...SEED_SECTIONS]).map(s=>({...s,defaultRoomId:s.defaultRoomId||''})),
         schedules:saved.schedules||[],
-        settings:{...SEED_SETTINGS,...(saved.settings||{})},
+        settings:(()=>{
+        const merged={...SEED_SETTINGS,...(saved.settings||{})};
+        if(!merged.logoLeftImg) merged.logoLeftImg=SEED_SETTINGS.logoLeftImg;
+        if(!merged.logoRightImg) merged.logoRightImg=SEED_SETTINGS.logoRightImg;
+        return merged;
+      })(),
         signatories:saved.signatories||[...SEED_SIGNATORIES],
         timeSettings:saved.timeSettings||{...SEED_TIME},
       };
