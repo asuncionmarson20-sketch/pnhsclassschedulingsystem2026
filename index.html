@@ -4475,7 +4475,7 @@ const LoginScreen=({onLogin,setSettings})=>{
     try{const s=localStorage.getItem('ph_scheduler_v2');return s?JSON.parse(s)?.settings?.schoolName||'Patul National High School':'Patul National High School';}catch{return'Patul National High School';}
   });
   const [logoImg,setLogoImg]=useState(()=>{
-    try{const s=localStorage.getItem('ph_scheduler_v2');return s?JSON.parse(s)?.settings?.logoLeftImg||'':'';}catch{return'';}
+    try{const s=localStorage.getItem('ph_scheduler_v2');return s?JSON.parse(s)?.settings?.logoLeftImg||SEED_SETTINGS.logoLeftImg:SEED_SETTINGS.logoLeftImg;}catch{return SEED_SETTINGS.logoLeftImg;}
   });
   const [logoSaved,setLogoSaved]=useState(false);
 
