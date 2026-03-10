@@ -4275,7 +4275,23 @@ const ReportSettingsPage=({settings,setSettings,signatories,setSignatories,toast
   const [editSig,setEditSig]=useState(null);
   const emptySig={id:'',name:'',position:'',title:'',order:signatories.length+1};
 
+  // Re-sync only logo images if changed externally (e.g. from login screen upload)
+  useEffect(()=>{
+    setLocal(prev=>({
+      ...prev,
+      logoLeftImg: settings.logoLeftImg||'',
+      logoRightImg: settings.logoRightImg||'',
+    }));
+  // eslint-disable-next-line
+  },[settings.logoLeftImg, settings.logoRightImg]);
+
   const save=()=>{setSettings({...local});toast('Settings saved','success');};
+
+  // Immediately persist logo changes without requiring Save button click
+  const handleLogoChange=(key,val)=>{
+    setLocal(s=>({...s,[key]:val}));
+    setSettings(s=>({...s,[key]:val}));
+  };
 
   const saveSig=()=>{
     if(!editSig.name.trim()||!editSig.position.trim()){toast('Name and position required','error');return;}
@@ -4307,10 +4323,17 @@ const ReportSettingsPage=({settings,setSettings,signatories,setSignatories,toast
         </div>
         <div className="card">
           <div className="card-header"><span className="card-title">Report Header Logos</span></div>
-          <p className="text-muted text-xs mb-8">Upload an image (PNG/JPG) or type an emoji.</p>
-          <div className="grid-2">
-            <LogoEditor label="Left Logo" fallback={local.logoLeft||'🏫'} imgData={local.logoLeftImg||''} onFallbackChange={v=>setLocal(s=>({...s,logoLeft:v}))} onImgChange={v=>setLocal(s=>({...s,logoLeftImg:v}))} fallbackPlaceholder="🏫"/>
-            <LogoEditor label="Right Logo" fallback={local.logoRight||'🇵🇭'} imgData={local.logoRightImg||''} onFallbackChange={v=>setLocal(s=>({...s,logoRight:v}))} onImgChange={v=>setLocal(s=>({...s,logoRightImg:v}))} fallbackPlaceholder="🇵🇭"/>
+          <div style={{display:'flex',gap:12,alignItems:'center',marginBottom:10}}>
+            <div style={{width:48,height:48,borderRadius:8,overflow:'hidden',background:'var(--bg3)',display:'flex',alignItems:'center',justifyContent:'center',border:'1px solid var(--border)',flexShrink:0}}>
+              {local.logoLeftImg?<img src={local.logoLeftImg} style={{width:'100%',height:'100%',objectFit:'contain'}} alt="left logo"/>:<span style={{fontSize:24}}>{local.logoLeft||'🏫'}</span>}
+            </div>
+            <div style={{width:48,height:48,borderRadius:8,overflow:'hidden',background:'var(--bg3)',display:'flex',alignItems:'center',justifyContent:'center',border:'1px solid var(--border)',flexShrink:0}}>
+              {local.logoRightImg?<img src={local.logoRightImg} style={{width:'100%',height:'100%',objectFit:'contain'}} alt="right logo"/>:<span style={{fontSize:24}}>{local.logoRight||'🇵🇭'}</span>}
+            </div>
+            <div style={{fontSize:12,color:'var(--text2)'}}>Current logos used in printed reports</div>
+          </div>
+          <div style={{fontSize:11,color:'var(--text3)',padding:'10px 12px',background:'var(--bg3)',borderRadius:'var(--radius)',border:'1px solid var(--border)',marginTop:4}}>
+            🔒 Logos are locked and cannot be changed after publishing.
           </div>
           <div className="form-group mt-12">
             <label className="form-label">School Year</label>
@@ -4403,7 +4426,7 @@ const getSession=()=>null; // always start logged out
 const setSession=(u)=>{}; // no-op
 const clearSession=()=>{}; // no-op
 
-const LoginScreen=({onLogin})=>{
+const LoginScreen=({onLogin,setSettings})=>{
   const [username,setUsername]=useState('');
   const [password,setPassword]=useState('');
   const [showPass,setShowPass]=useState(false);
@@ -4419,15 +4442,18 @@ const LoginScreen=({onLogin})=>{
   const [logoImg,setLogoImg]=useState(()=>{
     try{const s=localStorage.getItem('ph_scheduler_v2');return s?JSON.parse(s)?.settings?.logoLeftImg||'':'';}catch{return'';}
   });
+  const [logoSaved,setLogoSaved]=useState(false);
 
   const handleLogoUpload=(e)=>{
     const file=e.target.files[0];
     if(!file)return;
+    if(!file.type.startsWith('image/')){alert('Please select an image file.');return;}
+    if(file.size>3*1024*1024){alert('Image too large. Please use an image under 3MB.');return;}
     const reader=new FileReader();
     reader.onload=(ev)=>{
       const img=ev.target.result;
       setLogoImg(img);
-      // Persist into saved settings
+      // 1. Persist to localStorage
       try{
         const raw=localStorage.getItem('ph_scheduler_v2');
         const data=raw?JSON.parse(raw):{};
@@ -4435,8 +4461,14 @@ const LoginScreen=({onLogin})=>{
         data.settings.logoLeftImg=img;
         localStorage.setItem('ph_scheduler_v2',JSON.stringify(data));
       }catch{}
+      // 2. Also update React settings state so it persists across pages immediately
+      if(setSettings){setSettings(s=>({...s,logoLeftImg:img}));}
+      // 3. Show brief confirmation
+      setLogoSaved(true);
+      setTimeout(()=>setLogoSaved(false),2500);
     };
     reader.readAsDataURL(file);
+    e.target.value='';
   };
 
   const handleLogin=()=>{
@@ -4470,7 +4502,7 @@ const LoginScreen=({onLogin})=>{
       <div style={{width:'100%',maxWidth:400,padding:'0 20px'}}>
         {/* School Header */}
         <div style={{textAlign:'center',marginBottom:24}}>
-          {/* Logo with upload button */}
+          {/* Logo - display only, not changeable */}
           <div style={{position:'relative',display:'inline-block',marginBottom:10}}>
             <div style={{width:80,height:80,borderRadius:20,background:logoImg?'transparent':'linear-gradient(135deg,#f78166,#ffa657)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:34,boxShadow:'0 8px 28px rgba(247,129,102,0.3)',overflow:'hidden',border:'2px solid rgba(255,255,255,0.08)'}}>
               {logoImg
@@ -4478,14 +4510,11 @@ const LoginScreen=({onLogin})=>{
                 :<span>🏫</span>
               }
             </div>
-            <label style={{position:'absolute',bottom:-4,right:-4,width:22,height:22,borderRadius:'50%',background:'#238636',border:'2px solid #161b22',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',fontSize:10}} title="Upload school logo">
-              📷
-              <input type="file" accept="image/*" onChange={handleLogoUpload} style={{display:'none'}}/>
-            </label>
           </div>
           <h1 style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800,color:'#ffffff',margin:'0 0 2px',textTransform:'uppercase',letterSpacing:1,lineHeight:1.2,textShadow:'0 2px 10px rgba(247,129,102,0.25)'}}>{schoolName}</h1>
           <p style={{fontSize:10,color:'#8b949e',margin:0,textTransform:'uppercase',letterSpacing:1.5,fontWeight:600}}>K–12 Class Scheduling System</p>
           <p style={{fontSize:9,color:'#6e7681',margin:'1px 0 0',textTransform:'uppercase',letterSpacing:1}}>DepEd Philippines</p>
+          {logoSaved&&<p style={{fontSize:10,color:'#3fb950',marginTop:6,fontWeight:600}}>✓ Logo saved successfully!</p>}
         </div>
 
         {/* Card */}
@@ -4543,9 +4572,6 @@ const LoginScreen=({onLogin})=>{
           </button>
         </div>
 
-        <p style={{textAlign:'center',fontSize:10,color:'#484f58',marginTop:12}}>
-          Click the 📷 icon above to change the school logo
-        </p>
       </div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}`}</style>
     </div>
@@ -4636,7 +4662,7 @@ const App=()=>{
   const groups=[...new Set(PAGES.map(p=>p.group))];
 
   // Guard: show login screen if not authenticated
-  if(!user)return <LoginScreen onLogin={handleLogin}/>;
+  if(!user)return <LoginScreen onLogin={handleLogin} setSettings={setSettings}/>;
 
   return(
     <>
